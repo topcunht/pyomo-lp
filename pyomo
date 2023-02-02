@@ -1,0 +1,229 @@
+import numpy as np
+import pandas as pd
+
+#Part 1
+
+year = np.arange(2)
+projects = np.arange(2)
+wbsofA = np.arange(15)
+wbsofB = np.arange(14)
+
+df_numberofworker = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="NumberofWorker", header=0, index_col=0)
+df_maxDurationofA = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="MaxDurationA", header=0, index_col=0)
+df_maxDurationofB = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="MaxDurationB", header=0, index_col=0)
+df_minDurationofA = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="MinDurationA", header=0, index_col=0)
+df_minDurationofB = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="MinDurationB", header=0, index_col=0)
+df_wageRate = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="DailyWageRate", header=0, index_col=0)
+df_lessdurationA = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="DurationEachWorkerA", header=0, index_col=0)
+df_lessdurationB = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="DurationEachWorkerB", header=0, index_col=0)
+
+lessDurationA={}
+lessDurationA=df_lessdurationA.to_numpy()[0]
+
+lessDurationB={}
+lessDurationB=df_lessdurationB.to_numpy()[0]
+
+maxDurationA={}
+maxDurationA=df_maxDurationofA.to_numpy()[0]
+        
+maxDurationB={}
+maxDurationB=df_maxDurationofB.to_numpy()[0]
+    
+minDurationA={}
+minDurationA=df_minDurationofA.to_numpy()[0]
+        
+minDurationB={}
+minDurationB=df_minDurationofB.to_numpy()[0]
+
+numberOfWorker={}
+numberOfWorker=df_numberofworker.to_numpy()[0]
+
+wageRateOfYears={}
+for i in np.arange(len(year)):
+    for j in np.arange(len(projects)):
+        wageRateOfYears[(i,j)]=df_wageRate.iloc[i,j]
+        
+
+# Part 2 Option 1
+
+df_penaltyCost = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="Penalty", header=0, index_col=0)
+df_overtimeWage = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="OvertimeWage", header=0, index_col=0)
+
+penaltyCost={}
+penaltyCost=df_penaltyCost.to_numpy()[0]
+
+overtimeWage={}
+overtimeWage = df_overtimeWage.to_numpy()[0]
+
+p_n = np.arange(2)
+
+# Part 2 Option 2
+
+df_budget = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="Budget", header=0, index_col=0)
+
+budget={}
+budget = df_budget.to_numpy()[0]
+
+df_crateA = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="CrashRateA", header=0, index_col=0)
+
+crateA={}
+crateA = df_crateA.to_numpy()[0]
+
+df_crateB = pd.read_excel(r'/Users/topcunht/Desktop/Pyomo/DataExcel.xlsx', sheet_name="CrashRateB", header=0, index_col=0)
+
+crateB={}
+crateB = df_crateB.to_numpy()[0]
+
+import numpy as np
+import pandas as pd
+import Case2_data
+import pyomo.environ as pyo 
+from pyomo.opt import SolverFactory
+
+mdl = pyo.ConcreteModel("Case2_Solution")
+
+#sets
+mdl.I = pyo.Set(initialize=Case2_data.projects, doc="Project A&B")
+mdl.J = pyo.Set(initialize=Case2_data.wbsofA, doc="WBS of A")
+mdl.K = pyo.Set(initialize=Case2_data.wbsofB, doc="WBS of B") 
+mdl.Y = pyo.Set(initialize=Case2_data.year, doc="Years")
+
+#param
+mdl.pN = pyo.Param(mdl.I, initialize=Case2_data.numberOfWorker, doc="Number of Worker")
+mdl.pA = pyo.Param(mdl.J, initialize=Case2_data.maxDurationA, doc="Max Duration of wbs no j of project A")
+mdl.pC = pyo.Param(mdl.K, initialize=Case2_data.maxDurationB, doc="Max Duration of wbs no k of project B")
+mdl.pW = pyo.Param(mdl.I, mdl.Y, initialize=Case2_data.wageRateOfYears, doc="Daily wage rate at each year of each project")
+mdl.pG = pyo.Param(mdl.J, initialize=Case2_data.lessDurationA, doc="Each wbs duration less a")
+mdl.pS = pyo.Param(mdl.K, initialize=Case2_data.lessDurationB, doc="Each wbs duration less b")
+
+
+
+#decision
+mdl.vX = pyo.Var(mdl.I, doc="Total number of Worker project i", within=pyo.NonNegativeReals)
+mdl.vFp = pyo.Var(mdl.I, doc= "Days that is exceeded 360 days for Project i", within=pyo.NonNegativeReals)
+mdl.vFn = pyo.Var(mdl.I, doc= "Days that is undered 360 days for Project i", within=pyo.NonNegativeReals)
+mdl.vK = pyo.Var(mdl.J, doc="Duration of WBS no j of Project A", within=pyo.NonNegativeReals)
+mdl.vT = pyo.Var(mdl.K, doc="Duration of wbs no k of Project B", within=pyo.NonNegativeReals)
+mdl.vL = pyo.Var(mdl.I, doc= "Total duration of chain project i", within=pyo.NonNegativeReals)
+
+#Constraints
+
+def eDurationA(mdl,j):
+    return mdl.vK[j] + (mdl.vX[0]*mdl.pG[j]) == mdl.pA[j]
+mdl.eDurationA = pyo.Constraint(mdl.J, rule=eDurationA, doc='Duration constraint of A')
+
+def eDurationB(mdl, k):
+    return mdl.vT[k] + (mdl.vX[1]*mdl.pS[k]) == mdl.pC[k]
+mdl.eDurationB = pyo.Constraint(mdl.K, rule=eDurationB, doc='Duration constraint of B')
+
+def eNumberWorker(mdl,i):
+    return sum(mdl.vX[i] for i in mdl.I) == 100
+mdl.eNumberWorker = pyo.Constraint(mdl.I, rule=eNumberWorker, doc='Proportion Constraint')
+
+def eFinishing_A(mdl, i):
+    return mdl.vL[0] - mdl.vFp[0] + mdl.vFn[0] == 360
+mdl.eFinishing_A = pyo.Constraint(mdl.I, rule=eFinishing_A, doc="Finishing time constraint of A 360 ")
+
+def eFinishing_B(mdl,i ):
+    return mdl.vL[1] - mdl.vFp[1] + mdl.vFn[1] == 360
+mdl.eFinishing_B = pyo.Constraint(mdl.I, rule=eFinishing_B, doc="Finishing time constraint of B 360")
+
+def eTotalDayA(mdl, i):
+    return  mdl.vL[i] <= 720
+mdl.eTotalDay = pyo.Constraint(mdl.I, rule=eTotalDayA, doc="Day Rule ")
+
+
+
+# Chains
+
+def eDurationChain1a (mdl):
+    return mdl.vL[0] >= sum(mdl.vK[t] for t in [0,1,2,3] )
+mdl.eDurationChain1a = pyo.Constraint(rule=eDurationChain1a, doc="Duration constraint c1a")
+
+def eDurationChain2a (mdl):
+    return mdl.vL[0] >= sum(mdl.vK[t] for t in [0,4,5,6,7,8,14] )
+mdl.eDurationChain2a = pyo.Constraint(rule=eDurationChain2a, doc='Duration constraint c2a')
+
+def eDurationChain3a (mdl):
+    return mdl.vL[0] >= sum(mdl.vK[t] for t in [0,4,5,9,10,13,14] )
+mdl.eDurationChain3a = pyo.Constraint(rule=eDurationChain3a, doc='Duration constraint c3a')
+
+def eDurationChain4a (mdl):
+    return mdl.vL[0] >= sum(mdl.vK[t] for t in [0,4,5,9,10,12] )
+mdl.eDurationChain4a = pyo.Constraint(rule=eDurationChain4a, doc='Duration constraint c4a')
+
+def eDurationChain5a (mdl):
+    return mdl.vL[0] >= sum(mdl.vK[t] for t in [0,4,5,9,10,11] )
+mdl.eDurationChain5a = pyo.Constraint(rule=eDurationChain5a, doc='Duration constraint c5a')
+
+def eDurationChain1b (mdl):
+    return mdl.vL[1] >= sum(mdl.vT[t] for t in [0,1,2,3,4,5,6,7,9,10,11,13])
+mdl.eDurationChain1b = pyo.Constraint(rule=eDurationChain1b, doc="Duration constraint c1b")
+
+def eDurationChain2b (mdl):
+    return mdl.vL[1] >= sum(mdl.vT[t] for t in [0,1,2,3,4,8,9,10,11,13])
+mdl.eDurationChain2b = pyo.Constraint(rule=eDurationChain2b, doc="Duration constraint c2b")
+
+def eDurationChain3b (mdl):
+    return mdl.vL[1] >= sum(mdl.vT[t] for t in [0,1,2,3,4,12,13])
+mdl.eDurationChain3b = pyo.Constraint(rule=eDurationChain3b, doc="Duration constraint c3b")
+ 
+
+
+
+#Objective Function
+
+def eMin_Cost(mdl):
+    return (mdl.pN[0]*(mdl.pW[0,0]*(360-mdl.vFn[0])+ (mdl.pW[1,0]*mdl.vFp[0]))+mdl.pN[1]*(mdl.pW[0,1]*(360-mdl.vFn[1])+(mdl.pW[1,1]*mdl.vFp[1])))               
+mdl.eMin_Cost = pyo.Objective(rule=eMin_Cost, sense=pyo.minimize, doc="Total wage cost")
+
+#Solver Factory
+
+mdl.write('mdl.lp', io_options={'symbolic_solver_labels': True})
+mdl.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+mdl.rc = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+Solver = SolverFactory('glpk')
+Solver.options["ranges"] = "/Users/topcunht/Desktop/Pyomo/Reports.txt"
+SolverResults = Solver.solve(mdl, tee=True)
+SolverResults.write()
+mdl.pprint()
+
+
+#export to excel: reduced costs
+reduced_cost_dict={str(key):mdl.rc[key] for key in mdl.rc.keys()}
+Reduced_Costs_print =pd.DataFrame.from_dict(reduced_cost_dict,orient="index", columns=["reduced cost"])
+Reduced_Costs_print.to_excel(r'/Users/topcunht/Desktop/Pyomo/ReducedCosts.xlsx', sheet_name='ReducedCosts')
+
+duals_dict = {str(key):mdl.dual[key] for key in mdl.dual.keys()}
+
+u_slack_dict = {
+    # uslacks for non-indexed constraints
+    **{str(con):con.uslack() for con in mdl.component_objects(pyo.Constraint)
+       if not con.is_indexed()},
+    # indexed constraint uslack
+    # loop through the indexed constraints
+    # get all the indices then retrieve the slacks for each index of constraint
+    **{k:v for con in mdl.component_objects(pyo.Constraint) if con.is_indexed()
+       for k,v in {'{}[{}]'.format(str(con),key):con[key].uslack()
+                   for key in con.keys()}.items()}
+    }
+
+l_slack_dict = {
+    # lslacks for non-indexed constraints
+    **{str(con):con.lslack() for con in mdl.component_objects(pyo.Constraint)
+       if not con.is_indexed()},
+    # indexed constraint lslack
+    # loop through the indexed constraints
+    # get all the indices then retrieve the slacks for each index of constraint
+    **{k:v for con in mdl.component_objects(pyo.Constraint) if con.is_indexed()
+       for k,v in {'{}[{}]'.format(str(con),key):con[key].lslack()
+                   for key in con.keys()}.items()}
+    }
+
+# combine into a single df
+Shadow_Prices_print = pd.concat([pd.Series(d,name=name)
+           for name,d in {'duals':duals_dict,
+                          'uslack':u_slack_dict,
+                          'lslack':l_slack_dict}.items()],
+          axis='columns')
+Shadow_Prices_print.to_excel(r'/Users/topcunht/Desktop/Pyomo/ShadowPrices.xlsx', sheet_name='ShadowPrices')
